@@ -1,0 +1,66 @@
+name: Prenot@mi Monitor
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Monitor Prenot@mi for available slots
+      env:
+        GMAIL_EMAIL: ${{ secrets.GMAIL_EMAIL }}
+        GMAIL_PASSWORD: ${{ secrets.GMAIL_PASSWORD }}
+      run: |
+        python3 << 'EOF'
+        import requests
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        import os
+        from datetime import datetime
+        
+        url = "https://www.prenotami.esteri.it/"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        sender_email = os.getenv('GMAIL_EMAIL')
+        sender_password = os.getenv('GMAIL_PASSWORD')
+        recipient_email = sender_email
+        
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            
+            if 'settembre' in response.text.lower() or 'september' in response.text.lower() or 'ottobre' in response.text.lower() or 'october' in response.text.lower():
+                alert_msg = f"""
+PRENOT@MI ALERT - CHECK IMMEDIATELY!
+
+Potential slots may be available for September/October.
+
+URL: {url}
+
+Checked at: {datetime.now()}
+"""
+                
+                msg = MIMEMultipart()
+                msg['From'] = sender_email
+                msg['To'] = recipient_email
+                msg['Subject'] = "PRENOT@MI - SLOTS MAY BE AVAILABLE"
+                msg.attach(MIMEText(alert_msg, 'plain'))
+                
+                server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
+                server.login(sender_email, sender_password)
+                server.send_message(msg)
+                server.quit()
+                print("✓ Email alert sent!")
+            else:
+                print(f"No new availability detected. Last check: {datetime.now()}")
+                
+        except Exception as e:
+            print(f"Error: {str(e)}")
+        
+        EOF
